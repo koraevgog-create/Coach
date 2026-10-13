@@ -1,25 +1,17 @@
 (()=>{"use strict";
 const $=id=>document.getElementById(id),input=$("request"),answer=$("answer"),q=$("question"),area=$("area"),number=$("number");
-let questions=[],index=0,current="",saved=[];
-try{saved=JSON.parse(localStorage.getItem("mentorFavorites")||"[]")}catch{}
-saved=Array.isArray(saved)?saved.filter(x=>typeof x==="string"&&x.length<=100):[];
-const norm=s=>s.toLowerCase().replace(/ё/g,"е").replace(/[^а-яa-z0-9\s]/g," ").replace(/\s+/g," ").trim();
-const matched=(text,key)=>{const q=norm(key);return q.includes(" ")?text.includes(q):text.split(" ").some(w=>w.startsWith(q))};
-const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
-function detect(text){const n=norm(text);return MENTOR_THEMES.map(t=>({name:t[0],score:t[1].split(",").reduce((a,k)=>a+(matched(n,k)?1:0),0)})).sort((a,b)=>b.score-a.score).filter(t=>t.score>0).slice(0,2)}
-function detectIntents(text){const n=norm(text);return MENTOR_CONTEXT.intents.map(i=>({item:i,score:i.keys.reduce((a,k)=>a+(matched(n,k)?1:0),0)})).sort((a,b)=>b.score-a.score).filter(i=>i.score>0).slice(0,2).map(i=>i.item)}
-function prepare(){const text=input.value.trim();if(!text){input.focus();return}
-const themes=detect(text),intents=detectIntents(text);
-area.textContent=(themes.length?themes.map(x=>x.name).join(" · "):"Открытый вопрос").toUpperCase();
-const topic=themes.length?themes[0].name.toLowerCase():text.slice(0,32);
-const contextual=themes.flatMap(x=>MENTOR_CONTEXT.themes[x.name]||[]);
-const intentQs=intents.flatMap(i=>i.questions);
-const frames=MENTOR_FRAMES.map(f=>f.replaceAll("{topic}",topic));
-const baseline=MENTOR_QUESTIONS;
-questions=[...new Set([...shuffle(contextual),...shuffle(intentQs),...shuffle(frames),...shuffle(baseline)].filter(x=>x.length<=100))];
-index=0;show()}
-function show(){if(!questions.length)return;if(index>=questions.length){questions=shuffle(questions);index=0}current=questions[index++];q.textContent=current;number.textContent=String(index).padStart(2,"0");answer.classList.remove("hidden");$("save").textContent=saved.includes(current)?"★ Сохранено":"☆ Сохранить";answer.scrollIntoView({behavior:"smooth",block:"center"})}
-function render(){const box=$("favorites");box.replaceChildren();if(!saved.length){const el=document.createElement("p");el.textContent="Пока здесь тихо. Сохрани вопрос, который откликнется.";box.append(el);return}saved.slice().reverse().forEach(s=>{const el=document.createElement("div");el.className="fav";el.textContent=s;box.append(el)})}
+let queue=[],index=0,current="",saved=[];try{saved=JSON.parse(localStorage.getItem("mentorFavorites")||"[]")}catch{}saved=Array.isArray(saved)?saved.filter(s=>typeof s==="string"&&s.length<=100):[];
+const normalize=s=>String(s).toLowerCase().replace(/ё/g,"е").replace(/[^а-яa-z0-9\s]/g," ").replace(/\s+/g," ").trim();
+const match=(s,k)=>{const key=normalize(k);if(key.includes(" "))return (" "+s+" ").includes(" "+key+" ")||s.includes(key+" ");return s.split(" ").some(w=>w===key||(key.length>=4&&w.startsWith(key)))};
+const count=(text,keys)=>keys.reduce((n,k)=>n+(match(text,k)?1:0),0);
+const unique=xs=>[...new Set(xs.filter(x=>typeof x==="string"&&x.length<=100))];
+function rank(text){const themes=MENTOR_THEMES.map(t=>({name:t[0],score:count(text,t[1].split(","))})).filter(x=>x.score).sort((a,b)=>b.score-a.score);const intents=MENTOR_CONTEXT.intents.map(i=>({item:i,score:count(text,i.keys)})).filter(x=>x.score).sort((a,b)=>b.score-a.score);const scenarios=MENTOR_CASES.scenarios.map(c=>({item:c,score:count(text,c.keys)})).filter(x=>x.score).sort((a,b)=>b.score-a.score);return{themes,intents,scenarios}}
+function prepare(){const text=input.value.trim();if(!text){input.focus();return}const n=normalize(text),r=rank(n);const crisis=MENTOR_CASES.safety.find(c=>count(n,c.keys)>0);const specific=r.scenarios[0]?.item;const themeName=specific?.theme||r.themes[0]?.name||"";const intent=r.intents[0]?.item;area.textContent=(crisis?"ВАЖНОЕ":themeName||"ВОПРОС НАСТАВНИКА").toUpperCase();
+const specificQs=specific?specific.questions:[];const contextual=themeName?(MENTOR_CONTEXT.themes[themeName]||[]):[];const intentQs=intent?intent.questions:[];const backup=MENTOR_QUESTIONS;const promptContext=themeName.toLowerCase();
+const dynamic=promptContext?MENTOR_FRAMES.map(f=>f.replaceAll("{topic}",promptContext)):[];
+queue=unique([...(crisis?crisis.questions:[]),...specificQs,...intentQs,...contextual,...dynamic,...backup]);if(crisis)queue=unique(crisis.questions);index=0;show()}
+function show(){if(!queue.length)return;if(index>=queue.length)index=0;current=queue[index++];q.textContent=current;number.textContent=String(index).padStart(2,"0");answer.classList.remove("hidden");$("save").textContent=saved.includes(current)?"★ Сохранено":"☆ Сохранить";answer.scrollIntoView({behavior:"smooth",block:"center"})}
+function render(){const box=$("favorites");box.replaceChildren();if(!saved.length){const e=document.createElement("p");e.textContent="Пока пусто. Сохрани вопрос, который откликнется.";box.append(e);return}saved.slice().reverse().forEach(s=>{const e=document.createElement("div");e.className="fav";e.textContent=s;box.append(e)})}
 function store(){try{localStorage.setItem("mentorFavorites",JSON.stringify(saved))}catch{}}
 input.addEventListener("input",()=>{$("count").textContent=input.value.length});
 $("ask").addEventListener("click",prepare);$("next").addEventListener("click",show);
@@ -27,5 +19,5 @@ $("save").addEventListener("click",()=>{if(!current)return;saved=saved.includes(
 $("copy").addEventListener("click",()=>{if(!current)return;if(navigator.clipboard?.writeText)navigator.clipboard.writeText(current).catch(()=>{});else{const t=document.createElement("textarea");t.value=current;document.body.append(t);t.select();document.execCommand("copy");t.remove()}});
 $("clear").addEventListener("click",()=>{saved=[];store();render()});
 document.querySelectorAll("[data-example]").forEach(b=>b.addEventListener("click",()=>{input.value=b.dataset.example;input.dispatchEvent(new Event("input"));prepare()}));
-MENTOR_THEMES.forEach(t=>{const b=document.createElement("button");b.textContent=t[0];b.addEventListener("click",()=>{input.value="Хочу разобраться: "+t[0].toLowerCase();input.dispatchEvent(new Event("input"));prepare()});$("categories").append(b)});
-render();})();
+MENTOR_THEMES.forEach(t=>{const b=document.createElement("button");b.textContent=t[0];b.addEventListener("click",()=>{input.value="Хочу разобраться: "+t[0].toLowerCase();input.dispatchEvent(new Event("input"));prepare()});$("categories").append(b)});render();
+})();
