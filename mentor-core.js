@@ -23,8 +23,21 @@ const nuanceRules=[
  {id:"unsure_mistake",keys:["кажется я ошибся","походу я ошибся","наверно зря","зря я это сделал"],questions:["По каким признакам ты считаешь это ошибкой?","Что ты знал в момент своего решения?","Что ещё можно изменить в последствиях выбора?"]}
 ];
 
+
+const compoundRules=[
+ {id:"work_debt_family",all:[["уволиться","уйти с работы","сменить работу"],["кредит","долг","ипотек"],["семь","дет","родител"]],questions:["Как сохранить финансовую опору семьи, если решишь сменить работу?","Какие условия позволят тебе менять работу без резкого риска для близких?","Что можно подготовить до решения об увольнении?"]},
+ {id:"work_debt",all:[["уволиться","уйти с работы","сменить работу"],["кредит","долг","ипотек"]],questions:["Какой финансовый запас нужен, чтобы сменить работу спокойнее?","Что можно проверить до увольнения, учитывая обязательные платежи?","Какой риск перехода для тебя сейчас самый существенный?"]},
+ {id:"work_family",all:[["уволиться","уйти с работы","сменить работу"],["семь","дет","родител","близк"]],questions:["Какие потребности близких важно учесть при смене работы?","Что изменится для семьи, если ты останешься или уйдёшь?","Как обсудить эту перемену с близкими без поспешных обещаний?"]},
+ {id:"money_relationship",all:[["денег","деньг","зарплат","кредит","долг"],["ссор","руга","муж","жен","партнер","отношен"]],questions:["Что в денежных вопросах тревожит каждого из вас больше всего?","Какая договорённость о деньгах сейчас отсутствует?","Как обсудить финансовые трудности без взаимных обвинений?"]},
+ {id:"moving_family",all:[["переезд","переех","уехать","переезж"],["семь","дет","муж","жен","родител"]],questions:["Чьи потребности при переезде пока остаются неуслышанными?","Какое условие сделает перемену посильной для семьи?","Что можно выяснить вместе до решения о переезде?"]},
+ {id:"work_exhaustion_money",all:[["работ","начальник"],["устал","выгор","нет сил"],["денег","кредит","долг","зарплат"]],questions:["Как снизить истощение, не потеряв важный для тебя доход?","Что можно изменить в нагрузке, пока финансовый вопрос не решён?","Какая часть ситуации требует внимания прежде всего?"]},
+ {id:"love_fear",all:[["любл","отношен","партнер","парень","девушк"],["боюсь","страшно","страх","потеря"]],questions:["Что именно ты боишься потерять в этих отношениях?","Где твои опасения опираются на факты, а где на догадки?","О какой потребности тебе важно поговорить открыто?"]}
+];
+function compoundMatch(text){return compoundRules.find(rule=>rule.all.every(group=>group.some(k=>matches(text,k))))||null}
+
 function analyze(raw,library){
  const text=expand(raw);
+ const compound=compoundMatch(text);
  const nuance=nuanceRules.find(c=>hitKeys(text,c.keys).length>0)||null;
  const contrast=(library.contrast||[]).filter(c=>hitKeys(text,c.keys).length).sort((a,b)=>longest(b,text)-longest(a,text))[0]||null;
  const exceptions={job_change:["меня уволили","меня увольняют","сократили"],breakup:["не хочу расставаться","не хочу разводиться"],starting_business:["не хочу открывать бизнес"]};
@@ -32,13 +45,14 @@ function analyze(raw,library){
  const themes=(library.themes||[]).map(([name,keys])=>({name,score:hitKeys(text,keys.split(",")).length})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score);
  const intents=(library.intents||[]).map(item=>({item,score:hitKeys(text,item.keys).length})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score);
  const emergency=(library.safety||[]).find(item=>hitKeys(text,item.keys).length>0)||null;
- return{nuance,contrast,scenario:cases[0]?.item||null,theme:cases[0]?.item.theme||themes[0]?.name||"",intents:intents.map(x=>x.item),emergency};
+ return{compound,nuance,contrast,scenario:cases[0]?.item||null,theme:cases[0]?.item.theme||themes[0]?.name||"",intents:intents.map(x=>x.item),emergency};
 }
 function longest(c,t){return Math.max(0,...hitKeys(t,c.keys).map(x=>norm(x).length))}
 function prepare(text,library){const a=analyze(text,library),unique=new Set(),stages=[];
  const add=(arr,stage)=>{for(const q of arr||[]){if(typeof q==="string"&&q.length<=100&&!unique.has(q)){unique.add(q);stages.push({question:q,stage})}}};
  if(a.emergency){add(a.emergency.questions,"support");return{analysis:a,questions:stages}}
- if(a.nuance&&!a.contrast){add(a.nuance.questions,"specific");}
+ if(a.compound&&!a.contrast){add(a.compound.questions,"combined");}
+ if(a.nuance&&!a.contrast&&!a.compound){add(a.nuance.questions,"specific");}
  if(a.contrast){add(a.contrast.questions,"specific");add((library.intents||[]).filter(i=>i.id!=="желание").flatMap(i=>a.intents.includes(i)?i.questions:[]),"explore")}
  else{add(a.scenario?.questions,"specific");add(a.intents.flatMap(i=>i.questions).slice(0,6),"explore")}
  add(library.context?.[a.theme],"perspective");
