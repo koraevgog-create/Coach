@@ -35,9 +35,11 @@ const compoundRules=[
 ];
 function compoundMatch(text){return compoundRules.find(rule=>rule.all.every(group=>group.some(k=>matches(text,k))))||null}
 
+function implicitMatch(text,library){return (library.implicit||[]).find(x=>hitKeys(text,x.keys).length>0)||null}
 function analyze(raw,library){
  const text=expand(raw);
  const compound=compoundMatch(text);
+ const implicit=implicitMatch(text,library);
  const nuance=nuanceRules.find(c=>hitKeys(text,c.keys).length>0)||null;
  const contrast=(library.contrast||[]).filter(c=>hitKeys(text,c.keys).length).sort((a,b)=>longest(b,text)-longest(a,text))[0]||null;
  const exceptions={job_change:["меня уволили","меня увольняют","сократили"],breakup:["не хочу расставаться","не хочу разводиться"],starting_business:["не хочу открывать бизнес"]};
@@ -45,13 +47,14 @@ function analyze(raw,library){
  const themes=(library.themes||[]).map(([name,keys])=>({name,score:hitKeys(text,keys.split(",")).length})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score);
  const intents=(library.intents||[]).map(item=>({item,score:hitKeys(text,item.keys).length})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score);
  const emergency=(library.safety||[]).find(item=>hitKeys(text,item.keys).length>0)||null;
- return{compound,nuance,contrast,scenario:cases[0]?.item||null,theme:cases[0]?.item.theme||themes[0]?.name||"",intents:intents.map(x=>x.item),emergency};
+ return{implicit,compound,nuance,contrast,scenario:cases[0]?.item||null,theme:cases[0]?.item.theme||themes[0]?.name||"",intents:intents.map(x=>x.item),emergency};
 }
 function longest(c,t){return Math.max(0,...hitKeys(t,c.keys).map(x=>norm(x).length))}
 function prepare(text,library){const a=analyze(text,library),unique=new Set(),stages=[];
  const add=(arr,stage)=>{for(const q of arr||[]){if(typeof q==="string"&&q.length<=100&&!unique.has(q)){unique.add(q);stages.push({question:q,stage})}}};
  if(a.emergency){add(a.emergency.questions,"support");return{analysis:a,questions:stages}}
  if(a.compound){add(a.compound.questions,"combined");}
+ if(a.implicit&&!a.compound&&!a.contrast){add(a.implicit.questions,"implicit");}
  if(a.nuance&&!a.contrast&&!a.compound){add(a.nuance.questions,"specific");}
  if(a.contrast){add(a.contrast.questions,"specific");add((library.intents||[]).filter(i=>i.id!=="желание").flatMap(i=>a.intents.includes(i)?i.questions:[]),"explore")}
  else{add(a.scenario?.questions,"specific");add(a.intents.flatMap(i=>i.questions).slice(0,6),"explore")}
