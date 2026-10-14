@@ -36,8 +36,20 @@ const compoundRules=[
 function compoundMatch(text){return compoundRules.find(rule=>rule.all.every(group=>group.some(k=>matches(text,k))))||null}
 
 function implicitMatch(text,library){return (library.implicit||[]).find(x=>hitKeys(text,x.keys).length>0)||null}
+
+// Independent semantic cues: broader concepts rather than copies of scenario phrases.
+const semanticSignals=[
+ {id:"overwork",theme:"Отдых и энергия",groups:[["офис","смена","работа","дежурство"],["сил","утро","вымотан","выходн","сон"]],questions:["Что в твоём рабочем ритме мешает тебе восстанавливаться?","Какую нагрузку можно изменить прежде, чем принимать большое решение?"]},
+ {id:"financial_pressure",theme:"Деньги и покупки",groups:[["платеж","счета","квартплат","расход","оплат"],["остат","хватает","ноль","занимаю","пусто"]],questions:["Какой обязательный расход создаёт наибольшее давление?","Что ты знаешь о разнице между доходом и обязательными платежами?"]},
+ {id:"relationship_disconnection",theme:"Отношения",groups:[["муж","жена","вдвоем","вместе","партнер"],["молчим","тишина","далеко","чужие","разговор"]],questions:["Когда вы перестали чувствовать себя услышанными?","Что ты хотел бы вернуть в ваше общение?"]},
+ {id:"decision_pressure",theme:"Выбор и решения",groups:[["выбор","решение","решить","поступ"],["отклады","страш","ошиб","сомнен"]],questions:["Какой риск мешает тебе сделать выбор?","Что можно проверить, не принимая окончательного решения?"]},
+ {id:"social_isolation",theme:"Друзья",groups:[["люди","вокруг","знакомые","общение"],["никто","один","молчу","поговорить"]],questions:["В каком общении ты больше всего нуждаешься сейчас?","С кем можно начать разговор без необходимости всё объяснять?"]}
+];
+function semanticMatch(text){return semanticSignals.find(x=>x.groups.every(g=>g.some(k=>matches(text,k))))||null}
+
 function analyze(raw,library){
  const text=expand(raw);
+ const semantic=semanticMatch(text);
  const compound=compoundMatch(text);
  const implicit=implicitMatch(text,library);
  const nuance=nuanceRules.find(c=>hitKeys(text,c.keys).length>0)||null;
@@ -47,7 +59,7 @@ function analyze(raw,library){
  const themes=(library.themes||[]).map(([name,keys])=>({name,score:hitKeys(text,keys.split(",")).length})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score);
  const intents=(library.intents||[]).map(item=>({item,score:hitKeys(text,item.keys).length})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score);
  const emergency=(library.safety||[]).find(item=>hitKeys(text,item.keys).length>0)||null;
- return{implicit,compound,nuance,contrast,scenario:cases[0]?.item||null,theme:cases[0]?.item.theme||themes[0]?.name||"",intents:intents.map(x=>x.item),emergency};
+ return{semantic,implicit,compound,nuance,contrast,scenario:cases[0]?.item||null,theme:cases[0]?.item.theme||themes[0]?.name||"",intents:intents.map(x=>x.item),emergency};
 }
 function longest(c,t){return Math.max(0,...hitKeys(t,c.keys).map(x=>norm(x).length))}
 function prepare(text,library){const a=analyze(text,library),unique=new Set(),stages=[];
@@ -55,6 +67,7 @@ function prepare(text,library){const a=analyze(text,library),unique=new Set(),st
  if(a.emergency){add(a.emergency.questions,"support");return{analysis:a,questions:stages}}
  if(a.compound){add(a.compound.questions,"combined");}
  if(a.implicit&&!a.compound&&!a.contrast){add(a.implicit.questions,"implicit");}
+ if(a.semantic&&!a.implicit&&!a.compound&&!a.contrast){add(a.semantic.questions,"semantic");}
  if(a.nuance&&!a.contrast&&!a.compound){add(a.nuance.questions,"specific");}
  if(a.contrast){add(a.contrast.questions,"specific");add((library.intents||[]).filter(i=>i.id!=="желание").flatMap(i=>a.intents.includes(i)?i.questions:[]),"explore")}
  else{add(a.scenario?.questions,"specific");add(a.intents.flatMap(i=>i.questions).slice(0,6),"explore")}
