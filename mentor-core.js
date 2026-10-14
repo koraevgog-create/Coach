@@ -8,7 +8,7 @@ function analyze(raw,library){
  const text=norm(raw);
  const contrast=(library.contrast||[]).filter(c=>hitKeys(text,c.keys).length).sort((a,b)=>longest(b,text)-longest(a,text))[0]||null;
  const exceptions={job_change:["меня уволили","меня увольняют","сократили"],breakup:["не хочу расставаться","не хочу разводиться"],starting_business:["не хочу открывать бизнес"]};
- const cases=[...(library.cases||[]),...(library.extra||[])].map((item,order)=>{const hits=hitKeys(text,item.keys);let score=hits.length*10+Math.max(0,...hits.map(k=>norm(k).length));if((exceptions[item.id]||[]).some(k=>matches(text,k)))score=0;return{item,score,order}}).filter(x=>x.score>0).sort((a,b)=>b.score-a.score||a.order-b.order);
+ const cases=[...(library.cases||[]),...(library.extra||[]),...(library.more||[])].map((item,order)=>{const hits=hitKeys(text,item.keys);let score=hits.length*10+Math.max(0,...hits.map(k=>norm(k).length));if((exceptions[item.id]||[]).some(k=>matches(text,k)))score=0;return{item,score,order}}).filter(x=>x.score>0).sort((a,b)=>b.score-a.score||a.order-b.order);
  const themes=(library.themes||[]).map(([name,keys])=>({name,score:hitKeys(text,keys.split(",")).length})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score);
  const intents=(library.intents||[]).map(item=>({item,score:hitKeys(text,item.keys).length})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score);
  const emergency=(library.safety||[]).find(item=>hitKeys(text,item.keys).length>0)||null;
